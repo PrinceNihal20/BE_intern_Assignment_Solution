@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coverage Planning Visualization</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            gap: 2rem;
+        }
+        @media (min-width: 768px) {
+            .container {
+                grid-template-columns: 1fr 2fr;
+            }
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 1.5rem;
+        }
+        canvas {
+            border: 2px solid #3b82f6;
+            border-radius: 1rem;
+            background-color: #e5e7eb;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1; /* Maintain square aspect ratio */
+        }
+        input, button {
+            transition: all 0.2s;
+        }
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-8 min-h-screen flex items-center justify-center">
+
+    <div class="container bg-white rounded-3xl shadow-xl p-8 md:p-12">
+        
+        <div class="card space-y-6">
+            <h1 class="text-3xl font-semibold text-gray-800">Coverage Planner</h1>
+            <p class="text-gray-600">Enter your wall and obstacle dimensions to generate a cleaning path.</p>
+
+            <form id="planForm" class="space-y-4">
+                <div>
+                    <label for="wallWidth" class="block text-sm font-medium text-gray-700">Wall Dimensions (meters)</label>
+                    <div class="mt-1 flex space-x-2">
+                        <input type="number" id="wallWidth" name="wallWidth" value="5" step="0.1" class="flex-1 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2" placeholder="Width (m)" required>
+                        <input type="number" id="wallHeight" name="wallHeight" value="5" step="0.1" class="flex-1 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2" placeholder="Height (m)" required>
+                    </div>
+                </div>
+                
+                <div id="obstacles-container" class="space-y-4">
+                    <label class="block text-sm font-medium text-gray-700">Obstacles (meters)</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" name="obsX" value="2.5" step="0.1" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="X (m)">
+                        <input type="number" name="obsY" value="2.5" step="0.1" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="Y (m)">
+                        <input type="number" name="obsWidth" value="0.25" step="0.01" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="W (m)">
+                        <input type="number" name="obsHeight" value="0.25" step="0.01" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="H (m)">
+                    </div>
+                </div>
+                <button type="button" id="addObstacleBtn" class="w-full text-blue-500 hover:text-blue-700 font-medium py-2">
+                    + Add Another Obstacle
+                </button>
+            </form>
+
+            <div class="space-y-4 pt-4">
+                <button id="submitBtn" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Generate Path
+                </button>
+                <button id="playbackBtn" class="w-full bg-gray-500 text-white font-bold py-3 rounded-lg shadow-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500" disabled>
+                    Playback Path
+                </button>
+            </div>
+            
+            <div id="messageBox" class="p-4 rounded-lg text-sm transition-opacity opacity-0"></div>
+        </div>
+
+        <div class="card space-y-6">
+            <h2 class="text-2xl font-semibold text-gray-800">Visualization</h2>
+            <canvas id="wallCanvas"></canvas>
+            <div class="bg-gray-50 p-6 rounded-lg">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Path Planning Explained</h3>
+                <p id="explanationText" class="text-gray-600 leading-relaxed">
+                    Once you generate a path, a detailed explanation of the planning algorithm and its execution will appear here.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Store the last fetched trajectory data for playback
+        let lastTrajectory = null;
+        let animationFrame = null;
+        const explanationTextEl = document.getElementById('explanationText');
+        const playbackBtn = document.getElementById('playbackBtn');
+        const messageBox = document.getElementById('messageBox');
+        
+        // Helper function to show messages
+        function showMessage(text, type = 'info') {
+            messageBox.textContent = text;
+            messageBox.style.opacity = '1';
+            messageBox.className = `p-4 rounded-lg text-sm transition-opacity opacity-100 ${
+                type === 'success' ? 'bg-green-100 text-green-700' :
+                type === 'error' ? 'bg-red-100 text-red-700' :
+                'bg-blue-100 text-blue-700'
+            }`;
+            setTimeout(() => messageBox.style.opacity = '0', 5000);
+        }
+
+        // Add event listener for adding new obstacle input fields
+        document.getElementById('addObstacleBtn').addEventListener('click', () => {
+            const container = document.getElementById('obstacles-container');
+            const newObstacle = document.createElement('div');
+            newObstacle.className = 'flex items-center space-x-2';
+            newObstacle.innerHTML = `
+                <input type="number" name="obsX" step="0.1" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="X (m)">
+                <input type="number" name="obsY" step="0.1" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="Y (m)">
+                <input type="number" name="obsWidth" step="0.01" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="W (m)">
+                <input type="number" name="obsHeight" step="0.01" class="w-1/4 rounded-md border-gray-300 shadow-sm p-2" placeholder="H (m)">
+            `;
+            container.appendChild(newObstacle);
+        });
+
+        // Main form submission logic
+        document.getElementById('planForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Collect form data
+            const wallWidth = parseFloat(document.getElementById('wallWidth').value);
+            const wallHeight = parseFloat(document.getElementById('wallHeight').value);
+            const obstacles = [];
+            document.querySelectorAll('#obstacles-container > div').forEach(div => {
+                const inputs = div.querySelectorAll('input');
+                const obsX = parseFloat(inputs[0].value);
+                const obsY = parseFloat(inputs[1].value);
+                const obsWidth = parseFloat(inputs[2].value);
+                const obsHeight = parseFloat(inputs[3].value);
+                // Only add valid obstacles
+                if (!isNaN(obsX) && !isNaN(obsY) && !isNaN(obsWidth) && !isNaN(obsHeight) && obsWidth > 0 && obsHeight > 0) {
+                    obstacles.push({ x: obsX, y: obsY, width: obsWidth, height: obsHeight });
+                }
+            });
+
+            // Prepare the payload for the API
+            const payload = {
+                wall_width: wallWidth,
+                wall_height: wallHeight,
+                obstacles: obstacles
+            };
+
+            // Call the backend API
+            try {
+                const response = await fetch('/plan_coverage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    lastTrajectory = data;
+                    showMessage(`Path generated successfully! Trajectory ID: ${data.id}`, 'success');
+                    renderVisualization(data);
+                    playbackBtn.disabled = false;
+                } else {
+                    showMessage(`Error: ${data.detail}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Network Error: ${error.message}`, 'error');
+                console.error('Fetch error:', error);
+            }
+        });
+
+        // Trajectory playback logic
+        playbackBtn.addEventListener('click', () => {
+            if (lastTrajectory) {
+                renderVisualization(lastTrajectory, true);
+            }
+        });
+
+        // Canvas drawing logic
+        const canvas = document.getElementById('wallCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function renderVisualization(data, animate = false) {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+
+            const wallWidth = data.wall_width;
+            const wallHeight = data.wall_height;
+            const path = data.path;
+            const obstacles = data.obstacles;
+
+            // Adjust canvas to maintain aspect ratio
+            const scale = Math.min(canvas.width / wallWidth, canvas.height / wallHeight);
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            // Translate and scale the canvas context to fit the wall dimensions
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(scale, -scale); // Flip Y-axis to have (0,0) at bottom-left
+            ctx.translate(-wallWidth / 2, -wallHeight / 2);
+
+            // Draw the wall boundary
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 0.05;
+            ctx.strokeRect(0, 0, wallWidth, wallHeight);
+
+            // Draw obstacles
+            ctx.fillStyle = '#ef4444';
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            });
+
+            // Intelligent Explanation
+            explanationTextEl.innerHTML = `
+                The coverage path was generated using a simple <span class="font-bold">Boustrophedon (or 'snake') pattern</span>. The algorithm sweeps back and forth across the area, ensuring full coverage while intelligently navigating around the defined rectangular obstacles. The path avoids the obstacles by checking if the next point in the sweep pattern would fall inside one.
+            `;
+
+            if (animate) {
+                // Animate the path drawing
+                let pathIndex = 0;
+                let startTime = null;
+
+                const animatePath = (timestamp) => {
+                    if (!startTime) startTime = timestamp;
+                    const elapsed = timestamp - startTime;
+                    const speed = 10; // Speed of the animation (higher is faster)
+                    const pathLength = path.length;
+                    
+                    const newPathIndex = Math.min(Math.floor(elapsed / speed), pathLength - 1);
+
+                    if (newPathIndex > pathIndex) {
+                        ctx.strokeStyle = '#22c55e';
+                        ctx.lineWidth = 0.05;
+                        ctx.beginPath();
+                        
+                        // Find the start point to continue from
+                        const start = path[pathIndex];
+                        ctx.moveTo(start[0], start[1]);
+
+                        for (let i = pathIndex + 1; i <= newPathIndex; i++) {
+                             const p = path[i];
+                             ctx.lineTo(p[0], p[1]);
+                        }
+                        ctx.stroke();
+                        
+                        pathIndex = newPathIndex;
+                    }
+
+                    if (pathIndex < pathLength - 1) {
+                        animationFrame = requestAnimationFrame(animatePath);
+                    } else {
+                        showMessage("Playback complete!", 'info');
+                    }
+                };
+                animationFrame = requestAnimationFrame(animatePath);
+            } else {
+                // Draw the full path at once
+                if (path.length > 0) {
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 0.05;
+                    ctx.beginPath();
+                    ctx.moveTo(path[0][0], path[0][1]);
+                    for (let i = 1; i < path.length; i++) {
+                        const p = path[i];
+                        ctx.lineTo(p[0], p[1]);
+                    }
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
