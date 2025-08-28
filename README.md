@@ -27,7 +27,7 @@ Boustrophedon Algorithm: A foundational path planning algorithm used to demonstr
 Secure & Optimized Code: Key production-like features were implemented, including database indexing, parameterized queries to prevent SQL injection, and a logging middleware to track request performance.
 
 Video Walkthrough
-[<span style="color:red">Insert your video link here</span>]
+[<span style="color:red">https://drive.google.com/file/d/12fUDX0DFRkyHIDHtzsfeK-8TUoDmgxWL/view?usp=sharing</span>]
 
 This short video provides a detailed walkthrough of the application, explaining the core logic, user interaction flow, and the reasoning behind the technical decisions.
 
