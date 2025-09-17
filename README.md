@@ -1,5 +1,5 @@
 ## Coverage Planning & Data Management
-This project provides a full-stack solution for a coverage planning and data management system, developed as an assignment for a Backend internship.
+This project provides a full-stack solution for a coverage planning and data management system, developed for a industry internship.
 
 The solution is composed of three main parts: a FastAPI backend, a web-based frontend visualization, and a Pytest suite for API validation.
 
